@@ -1,9 +1,9 @@
 ﻿# folder
-Pangya/[Bb]uilds/
-Pangya/[Ll]ibrary/
-Pangya/[Oo]bj/
-Pangya/[Tt]emp/
-Pangya/Assets/UnityVS/Editor/
+Proj/[Bb]uilds/
+Proj/[Ll]ibrary/
+Proj/[Oo]bj/
+Proj/[Tt]emp/
+Proj/Assets/UnityVS/Editor/
 
 # *.ext
 *.csproj
