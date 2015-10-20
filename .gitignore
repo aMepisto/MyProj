@@ -1,0 +1,31 @@
+﻿# folder
+Pangya/[Bb]uilds/
+Pangya/[Ll]ibrary/
+Pangya/[Oo]bj/
+Pangya/[Tt]emp/
+Pangya/Assets/UnityVS/Editor/
+
+# *.ext
+*.csproj
+*.sln
+*.suo
+*.unityproj
+*.userprefs
+*.user
+*.tmp
+*.pidb
+*.pidb.meta
+*.booproj
+
+# Unity3D Generated File On Crash Reports
+sysinfo.txt
+
+# file
+[Dd]esktop.ini
+[Tt]humbs.db
+Tools/Build/*.log
+UnityVS.VersionSpecific.*
+
+# 임시
+Pangya/freetype255*
+Pangya/Assets/Editor/p4api.net.dll.*
