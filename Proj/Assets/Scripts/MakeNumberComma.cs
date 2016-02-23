@@ -8,9 +8,15 @@ public class MakeNumberComma : MonoBehaviour
 {    
     public InputField _inputField;
 	// Use this for initialization
+
+    int[] test = new int[2]{1,2};
 	void Start () 
 	{
         //_text = this.gameObject.GetComponentInChildren<Text>();
+        foreach (var a in test)
+        {
+            Debug.LogError("a : " + a);
+        }
 	}
 
     void OnGUI()
