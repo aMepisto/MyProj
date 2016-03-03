@@ -1,0 +1,604 @@
+/**
+ * Copyright 2013-2014 Ntreev Soft, Inc. All Rights Reserved.
+ */
+//#define FOR_MEPI_DEV
+
+using UnityEngine;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Ntreev.Crema.Code;
+using Protocols;
+using Enums;
+using Ntreev.PMGame;
+
+#define MEPI_REFACTORING
+#if MEPI_REFACTORING
+     public class MissionData
+    {
+
+    }
+
+    public interface IAchievement
+    {
+        void Init(List<MissionData> datas);
+
+        void ApplySync();
+
+        MissionData GetCurrentItem();
+
+        string GetTitle();
+
+        string GetDescription();
+    }
+
+    public abstract class MissionBase : IAchievement
+    {
+        #region variables
+        protected uint _groupID = 0u;        
+        protected List<MissionData> _datas = null;
+        protected List<AchievementRow> _cremaRows = null;
+        #endregion variables
+
+        public MissionBase(uint groupID)
+        {
+            this._groupID = groupID;
+        }
+
+        #region IAchievement implementation
+        protected void Init(List<MissionData> datas)
+        {
+            if (_datas == null)
+                _datas = new List<MissionData>();
+            _datas.AddRange(datas);
+        }
+
+        public abstract void ApplySync();
+        public abstract MissionData GetCurrentItem();
+        public abstract string GetTitle();
+        public abstract string GetDescription();
+        protected virtual bool InvalidDayTimeOver() { return true; }
+        #endregion
+    }
+
+    public class Mission_Achievement : MissionBase
+    {
+        public uint GroupID { get { return _groupID; } }
+
+        public List<MissionData> datas { get { return _datas; } }
+
+        public Mission_Achievement(uint groupID)
+            : base(groupID)
+        {
+        }
+
+        #region IAchievement implementation
+        public void Init(List<MissionData> datas)
+        {
+            base.Init(datas);
+        }
+
+        public override void ApplySync()
+        {
+            // do Something;
+        }
+
+        public override MissionData GetCurrentItem()
+        {
+            // do Search Current Item;
+            return _datas[0];
+        }
+
+        public override string GetTitle()
+        {
+            return string.Empty;
+        }
+
+        public override string GetDescription()
+        {
+            return string.Empty;
+        }
+
+        protected override bool InvalidDayTimeOver()
+        {
+            return base.InvalidDayTimeOver();
+        }
+        
+        #endregion
+    }
+
+    public class Mission_DailyMission : MissionBase
+    {
+        public uint GroupID { get { return _groupID; } }
+
+        public List<MissionData> datas { get { return _datas; } }
+
+        public Mission_DailyMission(uint groupID)
+            : base(groupID)
+        {
+        }
+
+        #region IAchievement implementation
+        public void Init(List<MissionData> datas)
+        {
+            base.Init(datas);
+        }
+
+        public override void ApplySync()
+        {
+            // do Something;
+        }
+
+        public override MissionData GetCurrentItem()
+        {
+            // do Search Current Item;
+            return _datas[0];
+        }        
+
+        public override string GetTitle()
+        {
+            return string.Empty;
+        }
+
+        public override string GetDescription()
+        {
+            return string.Empty;
+        }
+
+        protected override bool InvalidDayTimeOver()
+        {
+            // do something
+            return true;
+        }
+        #endregion
+    }
+#endif
+
+public class AchievementData
+{
+    public uint AchieveID;
+    public int SerialNo;
+    public int AchieveQty;
+
+    public float SyncAchieveCount { get; set; }
+    public int SyncCompleted { get; set; }
+    public int SyncRewarded { get; set; }
+    public int SyncUpdateDate { get; set; }
+
+    private float _progressValue;
+    public float ProgressValue { get { return _progressValue; } }
+
+    public int SortSync
+    {
+        get
+        {
+            if (0 != SyncCompleted && 0 == SyncRewarded) return 0;
+            else if (0 < SyncAchieveCount && 0 == SyncCompleted && 0 == SyncRewarded) return 1;
+            else if (0 == SyncAchieveCount && 0 == SyncCompleted && 0 == SyncRewarded) return 2;
+            else return 3;
+        }
+    }
+
+    public AchievementData()
+    {
+    }
+
+    public AchievementData(uint achieveID, int serialNo, int achieveQty)
+    {
+        this.AchieveID = achieveID;
+        this.SerialNo = serialNo;
+        this.AchieveQty = achieveQty;
+    }
+
+    public void SyncData(AchievementData sync)
+    {
+        this.AchieveID = sync.AchieveID;
+        this.SerialNo = sync.SerialNo;
+        this.AchieveQty = sync.AchieveQty;
+        this.SyncAchieveCount = sync.SyncAchieveCount;
+        this.SyncCompleted = sync.SyncCompleted;
+        this.SyncRewarded = sync.SyncRewarded;
+        this.SyncUpdateDate = sync.SyncUpdateDate;
+
+        _progressValue = SyncAchieveCount / AchieveQty;
+        if (1 < _progressValue)
+            _progressValue = 1;
+    }
+
+#if UNITY_EDITOR
+    public override string ToString()
+    {
+        return string.Format(
+            " AchieveId [ {0} ], SerialNo [ {1} ], AchieveCount [ {2} ], AchieveQty [ {3} ]\n" +
+            " Completed [ {4} ], Rewarded [ {5} ], UpdateDate [ {6} ]",
+            AchieveID, SerialNo, SyncAchieveCount, AchieveQty, SyncCompleted, SyncRewarded, SyncUpdateDate);
+    }
+#endif
+}
+
+public class AchievementManager : Singleton<AchievementManager>
+{
+    #region Sort
+    static int MissionCompare(KeyValuePair<int, AchievementData> x, KeyValuePair<int, AchievementData> y)
+    {
+        // 조건 1 : SyncSort 값 오름 차순 정렬.(0 [보상받기], 1 [진행중(0 < cnt)], 2 [진행중(0==cnt)], 3 [그외])
+        var nValue = x.Value.SortSync.CompareTo(y.Value.SortSync);
+        if (0 == nValue)
+        {
+            // 조건 2 : Progress값 내림 차순 정렬.
+            nValue = x.Value.ProgressValue.CompareTo(y.Value.ProgressValue);
+            if (0 == nValue)
+            {
+                // 조건 3 : Key값(GroupID) 오름차순 정렬.
+                return x.Key.CompareTo(y.Key);
+            }
+
+            return -nValue;
+        }
+
+        return nValue;
+    }
+    #endregion Sort
+
+	#region variables
+    private Dictionary<int, List<AchievementData>> _achievementDicBase = new Dictionary<int, List<AchievementData>>();    
+    private Dictionary<int, List<AchievementData>> _dailyMissionDicBase = new Dictionary<int, List<AchievementData>>();    
+    private Dictionary<int, List<AchievementData>> _affectionDicBase = new Dictionary<int, List<AchievementData>>();
+
+    private int _completeAchievementCount;
+    public bool IsCompletedAchievementItem { get { return (_completeAchievementCount > 0) ? true : false; } }
+
+    private int _completeDailyMissionCount;
+    public bool IsCompletedDailyMissionItem { get { return (_completeDailyMissionCount > 0) ? true : false; } }
+
+    private int _completeAffectionCount;
+    public bool IsCompletedAffectionItem { get { return (_completeAffectionCount > 0) ? true : false; } }
+
+    private List<KeyValuePair<int, AchievementData>> _sortedAchievementList = new List<KeyValuePair<int, AchievementData>>();
+    public List<KeyValuePair<int, AchievementData>> GetAchievementList() { return _sortedAchievementList; }
+
+    private List<KeyValuePair<int, AchievementData>> _sortedDailyMissionList = new List<KeyValuePair<int, AchievementData>>();
+    public List<KeyValuePair<int, AchievementData>> GetDailyMissionList() { return _sortedDailyMissionList; }
+
+    private List<KeyValuePair<int, AchievementData>> _sortedAffectionList = new List<KeyValuePair<int, AchievementData>>();
+    public List<KeyValuePair<int, AchievementData>> GetAffectionList() { return _sortedAffectionList; }
+
+    private uint _reqAchieveID = 0u;
+    private bool _IsActivatedHttp = false;
+	#endregion           
+
+    private void Awake()
+    {
+        PMNet.Instance.AfterAchievementReward += Response_AfterAchievementReward;
+        PMNet.Instance.AfterDailyMissionReward += Response_AfterDailyMissionReward;
+    }
+
+    private void Start()
+    {
+        _completeAchievementCount = 0;
+        _completeDailyMissionCount = 0;
+        _completeAffectionCount = 0;
+    }
+
+    private void OnEnable()
+    {
+        InitBaseData();
+    }
+    
+    public override void OnDestroy()
+    {
+        if (null != PMNet.Instance)
+        {
+            PMNet.Instance.AfterAchievementReward -= Response_AfterAchievementReward;
+            PMNet.Instance.AfterDailyMissionReward -= Response_AfterDailyMissionReward;
+        }
+
+        ClearBaseData();        
+    }
+
+    private void ClearBaseData()
+    {
+        if (null != _sortedAchievementList) ClearBaseList(_sortedAchievementList);
+        if (null != _sortedDailyMissionList) ClearBaseList(_sortedDailyMissionList);
+        if (null != _sortedAffectionList) ClearBaseList(_sortedAffectionList);
+        if (null != _achievementDicBase) ClearBaseDic(_achievementDicBase);
+        if (null != _dailyMissionDicBase) ClearBaseDic(_dailyMissionDicBase);
+        if (null != _affectionDicBase) ClearBaseDic(_affectionDicBase);
+    }
+
+    private void ClearBaseDic<T>(T list)
+        where T : Dictionary<int, List<AchievementData>>
+    {
+        var enumerator = list.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            if (null != enumerator.Current.Value)
+            {
+                enumerator.Current.Value.Clear();
+            }
+        }
+        list.Clear();
+        list = null;
+    }
+
+    private void ClearBaseList<T>(T list)
+        where T : List<KeyValuePair<int, AchievementData>>
+    {
+        list.Clear();
+        list = null;
+    }
+
+    private void InitBaseData()
+    {
+        var rows = new List<AchievementRow>();
+        rows.AddRange(CremaReader.DataSet.Achievement.Rows);
+
+        var achievementRows = rows.FindAll(x => x.type == eAchievementType.Achievement);
+        if (null != achievementRows && 0 < achievementRows.Count)
+        {
+            CreateBaseDic(_achievementDicBase, achievementRows);            
+            CreateBaseList(_achievementDicBase, _sortedAchievementList);
+        }
+
+        var dailyMissionRows = rows.FindAll(x => x.type == eAchievementType.DailyMission);
+        if (null != dailyMissionRows && 0 < dailyMissionRows.Count)
+        {
+            CreateBaseDic(_dailyMissionDicBase, dailyMissionRows);
+            CreateBaseList(_dailyMissionDicBase, _sortedDailyMissionList);
+        }
+        
+        var affectionRows = rows.FindAll(x => x.type == eAchievementType.Affection);
+        if (null != affectionRows && 0 < affectionRows.Count)
+        {
+            CreateBaseDic(_affectionDicBase, affectionRows);
+            CreateBaseList(_affectionDicBase, _sortedAffectionList);
+        }
+    }
+
+    private void CreateBaseDic<T, U>(T baseDic, U rows) 
+        where T : Dictionary<int, List<AchievementData>> 
+        where U : List<AchievementRow>
+    {
+        for (int i = 0; i < rows.Count; ++i)
+        {
+            if (false == baseDic.ContainsKey(rows[i].groupID))
+                baseDic.Add(rows[i].groupID, null);
+
+            if (baseDic[rows[i].groupID] == null)
+                baseDic[rows[i].groupID] = new List<AchievementData>();
+
+            var item = new AchievementData(rows[i].achieveID, rows[i].serialNo, rows[i].achieveQty);
+            baseDic[rows[i].groupID].Add(item);
+        }        
+    }
+
+    private void CreateBaseList<T, U>(T baseDic, U baseList) 
+        where T : Dictionary<int, List<AchievementData>> 
+        where U : List<KeyValuePair<int, AchievementData>>
+    {
+        var enumerator = baseDic.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            int key = enumerator.Current.Key;
+            AchievementData value = new AchievementData();
+            value.SyncData(enumerator.Current.Value[0]);
+            baseList.Add(new KeyValuePair<int, AchievementData>(key, value));
+        }
+    }
+
+    private bool IsInvalidDailyMissionTime(double addTime)
+    {        
+        var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var time = epoch.AddSeconds(addTime).ToLocalTime();
+        var spenTime = DateTime.Now - time;
+        if (1 < spenTime.TotalDays)
+            return false;
+        return true;
+    }
+
+    public void ApplySync(List<Protocols.Models.Achievement> syncList)
+    {
+        // 1. Apply Sync
+        if (syncList != null && 0 < syncList.Count)
+        {
+            for (int i = 0; i < syncList.Count; ++i)
+            {
+                uint achieveID;
+                if (false == syncList[i].AchieveIDSpecified) 
+                    achieveID = this._reqAchieveID;
+                else 
+                    achieveID = (uint)syncList[i].AchieveID.GetValueOrDefault();
+
+                ApplySyncBaseDics(achieveID, syncList[i]);
+            }
+
+            // 2. Update Cuerrent Item
+            UpdateCurrentItems();
+        }
+    }
+
+    #region Apply Sync
+    private void ApplySyncBaseDics(uint achieveID, Protocols.Models.Achievement resData)
+    {
+        AchievementRow rowData = CremaReader.DataSet.Achievement.Find(achieveID);
+        if (null != rowData)
+        {
+            switch(rowData.type)
+            {
+                case eAchievementType.Achievement:
+                    {
+                        if (_achievementDicBase.ContainsKey(rowData.groupID)) 
+                            ApplySyncBaseDic(_achievementDicBase, resData, rowData);
+                    }
+                    break;
+                case eAchievementType.DailyMission:
+                    {
+                        if (_dailyMissionDicBase.ContainsKey(rowData.groupID))
+                        {
+                            // Note : 데일리 미션은 날짜 체크 후 ApplySync 수행.
+                            if (resData.UpdateDateSpecified)
+                            {
+                                if (false == IsInvalidDailyMissionTime((double)resData.UpdateDate.Value))
+                                    return;
+                            }
+                            ApplySyncBaseDic(_dailyMissionDicBase, resData, rowData);
+                        }
+                    }
+                    break;
+                case eAchievementType.Affection:
+                    {
+                        if (_affectionDicBase.ContainsKey(rowData.groupID)) 
+                            ApplySyncBaseDic(_affectionDicBase, resData, rowData);
+                    }
+                    break;
+            }
+        }
+        else
+            Debug.LogError("AchievementRow is nullable [ " + achieveID + " ]");
+    }    
+
+    private void ApplySyncBaseDic<T>(T dic, Protocols.Models.Achievement resData, AchievementRow row)
+        where T : Dictionary<int, List<AchievementData>>
+    {
+        List<AchievementData> dataList = null;
+        if (dic.TryGetValue(row.groupID, out dataList))
+        {
+            AchievementData item = dataList.Find(data => data.AchieveID == row.achieveID);
+            if (null != item)
+            {
+                if (resData.CountSpecified) item.SyncAchieveCount = resData.Count.GetValueOrDefault();
+                if (resData.CompletedSpecified) item.SyncCompleted = resData.Completed.GetValueOrDefault();
+                if (resData.RewardedSpecified) item.SyncRewarded = resData.Rewarded.GetValueOrDefault();
+                if (resData.UpdateDateSpecified) item.SyncUpdateDate = resData.UpdateDate.GetValueOrDefault();
+
+                if (0 != item.SyncCompleted && 0 == item.SyncRewarded)
+                {
+                    if (row.type == eAchievementType.Achievement) ++_completeAchievementCount;
+                    if (row.type == eAchievementType.DailyMission) ++_completeDailyMissionCount;
+                    if (row.type == eAchievementType.Affection) ++_completeAffectionCount;
+                }
+            }
+        }
+    }
+    #endregion Apply Sync
+
+    #region Update Current Items
+    private void UpdateCurrentItems()
+    {
+        UpdateCurrentItem(_achievementDicBase, _sortedAchievementList);
+        _sortedAchievementList.Sort(MissionCompare);
+        UpdateCurrentItem(_dailyMissionDicBase, _sortedDailyMissionList);
+        _sortedDailyMissionList.Sort(MissionCompare);
+        UpdateCurrentItem(_affectionDicBase, _sortedAffectionList);
+        _sortedAffectionList.Sort(MissionCompare);
+
+#if FOR_MEPI_DEV
+        Debug.LogError(string.Format("[Achievement Sync Complete] : A [{0}], B [{1}], C [{2}]",_completeAchievementCount, _completeDailyMissionCount, _completeAffectionCount));
+#endif
+    }
+
+    private void UpdateCurrentItem<T,U>(T baseDic, U sortedList)
+        where T : Dictionary<int, List<AchievementData>>
+        where U : List<KeyValuePair<int, AchievementData>>
+    {
+        var enumerator = baseDic.GetEnumerator();
+        while (enumerator.MoveNext())
+        {                
+            var targetItem = sortedList.Find(x => x.Key == enumerator.Current.Key);
+            int index = SyncCurrentItem(targetItem.Value, enumerator.Current.Value);
+            if (0 <= index) targetItem.Value.SyncData(enumerator.Current.Value[index]);
+        }
+    }
+    
+    private int SyncCurrentItem(AchievementData targetItem, List<AchievementData> baseList)
+    {
+        if (targetItem == null) return -1;
+
+        for(int i = 0; i < baseList.Count; ++i)
+        {
+            if (CheckSyncData(baseList[i]))
+                return i;
+        }
+
+        return baseList.Count - 1;
+    }
+
+    private bool CheckSyncData(AchievementData checkData)
+    {
+        if (0 != checkData.SyncCompleted && 0 == checkData.SyncRewarded)
+            return true;
+        else if (0 <= checkData.SyncAchieveCount && 0 == checkData.SyncCompleted && 0 == checkData.SyncRewarded)
+            return true;
+        
+        return false;
+    }
+    #endregion Update Current Items
+
+    #region Post Server
+    private void SetRequestData(uint reqAchieveID)
+    {
+        if (this._IsActivatedHttp)
+            return;
+        this._reqAchieveID = reqAchieveID;
+        this._IsActivatedHttp = true;
+        PyUI.Popup.Instance.SetActiveWaitingNetwork(true);
+    }
+
+    private void IsResponsed()
+    {
+        this._IsActivatedHttp = false;
+        PyUI.Popup.Instance.SetActiveWaitingNetwork(false);
+    }
+
+    public void Request_AchievementReward(uint reqAchieveID)
+    {
+        Debug2.Assert(PMNet.Instance != null);
+        SetRequestData(reqAchieveID);
+        PMNet.Instance.ReqAchievementReward(reqAchieveID);
+    }    
+
+    public void Request_DailyMissionReward(uint reqAchieveID)
+    {
+        Debug2.Assert(PMNet.Instance != null);
+        SetRequestData(reqAchieveID);
+        PMNet.Instance.ReqDailyMissionReward(reqAchieveID);
+    }
+
+    private void Response_AfterAchievementReward(ResponseAchievementReward res)
+    {
+        IsResponsed();        
+        if (AckCode.Successful == res.AckCode)
+        {
+            var msg = StringManager.Instance.GetGameString("Achievement", "Achievement_ReceiveMsg");
+            PyUI.Popup.AutoMsg(msg, 2.5f);
+            if (0 < this._completeAchievementCount)
+                --this._completeAchievementCount;
+
+            Events.Instance.Raise(new Event_Mission_Refresh(true));
+            Events.Instance.Raise(new Event_TopMenu_Refresh());
+        }
+        else
+        {
+            //Debug.LogError("<ERROR!> AchievementReward : " + res.AckCode);
+        }
+    }    
+
+    private void Response_AfterDailyMissionReward(ResponseDailyMissionReward res)
+    {
+        IsResponsed();
+        if (AckCode.Successful == res.AckCode)
+        {
+            var msg = StringManager.Instance.GetGameString("Achievement", "DailyMission_ReceiveMsg");
+            PyUI.Popup.AutoMsg(msg, 2.5f);
+            if (0 < this._completeDailyMissionCount)
+                --this._completeDailyMissionCount;
+            Events.Instance.Raise(new Event_Mission_Refresh(true));
+            Events.Instance.Raise(new Event_TopMenu_Refresh());
+        }
+        else
+        {
+            //Debug.LogError("<ERROR!> DailyMissionReward : " + res.AckCode);
+        }
+    }
+    #endregion Post Server
+}
